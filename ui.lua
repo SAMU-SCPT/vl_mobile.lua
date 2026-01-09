@@ -1,12 +1,12 @@
--- ui.lua | VL HUB UI
--- CARREGA O MAIN
-
-local Core = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/SAMU-SCPT/vl_mobile.lua/main/main.lua"
-))()
+-- ui.lua – VL HUB FINAL
 
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer
+
+-- LOAD CORE
+local State = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/SAMU-SCPT/vl_mobile.lua/main/main.lua"
+))()
 
 -- ===============================
 -- GUI
@@ -15,76 +15,63 @@ local gui = Instance.new("ScreenGui", lp.PlayerGui)
 gui.Name = "VL_HUB"
 gui.ResetOnSpawn = false
 
-local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0,380,0,420)
-main.Position = UDim2.new(0.5,-190,0.5,-210)
-main.BackgroundColor3 = Color3.fromRGB(20,20,20)
-main.Active = true
-main.Draggable = true
-Instance.new("UICorner", main).CornerRadius = UDim.new(0,14)
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0,280,0,330)
+frame.Position = UDim2.new(0.05,0,0.25,0)
+frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+frame.Active = true
+frame.Draggable = true
+frame.BorderSizePixel = 0
 
--- TITLE
-local title = Instance.new("TextLabel", main)
-title.Size = UDim2.new(1,0,0,45)
-title.Text = "VL HUB | MOBILE"
-title.TextColor3 = Color3.fromRGB(255,80,80)
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1,0,0,40)
+title.Text = "VL HUB | SAMU"
+title.TextColor3 = Color3.new(1,1,1)
 title.BackgroundTransparency = 1
-title.Font = Enum.Font.GothamBold
 title.TextScaled = true
 
 -- ===============================
--- TOGGLE MAKER
+-- TOGGLE CREATOR
 -- ===============================
-local y = 55
-local function Toggle(text, key)
-    local b = Instance.new("TextButton", main)
-    b.Size = UDim2.new(0.9,0,0,38)
-    b.Position = UDim2.new(0.05,0,0,y)
-    b.BackgroundColor3 = Color3.fromRGB(40,40,40)
+local y = 50
+local function toggle(text, key)
+    local b = Instance.new("TextButton", frame)
+    b.Size = UDim2.new(1,-20,0,40)
+    b.Position = UDim2.new(0,10,0,y)
+    b.BackgroundColor3 = Color3.fromRGB(120,0,0)
     b.TextColor3 = Color3.new(1,1,1)
-    b.Text = text .. ": OFF"
-    b.Font = Enum.Font.Gotham
     b.TextScaled = true
-    Instance.new("UICorner", b)
+    b.Text = text.." : OFF"
 
     b.MouseButton1Click:Connect(function()
-        Core.Config[key] = not Core.Config[key]
-        b.Text = text .. (Core.Config[key] and ": ON" or ": OFF")
-        b.BackgroundColor3 = Core.Config[key]
-            and Color3.fromRGB(180,60,60)
-            or Color3.fromRGB(40,40,40)
+        State[key] = not State[key]
+        b.Text = text.." : "..(State[key] and "ON" or "OFF")
+        b.BackgroundColor3 = State[key]
+            and Color3.fromRGB(0,150,0)
+            or Color3.fromRGB(120,0,0)
     end)
 
     y += 45
 end
 
--- ===============================
--- TOGGLES
--- ===============================
-Toggle("Auto Spike","AutoSpike")
-Toggle("Auto Receive","AutoReceive")
-Toggle("Auto Block","AutoBlock")
-Toggle("Auto Farm","AutoFarm")
-Toggle("Infinite Jump","InfJump")
-Toggle("Ball Tracker","BallTracker")
-Toggle("Anti AFK","AntiAFK")
+toggle("Auto Spike","AutoSpike")
+toggle("Auto Receive","AutoReceive")
+toggle("Auto Farm","AutoFarm")
+toggle("Ball Tracker","BallTracker")
 
 -- ===============================
 -- SPEED SLIDER (SIMPLIFICADO)
 -- ===============================
-local speed = Instance.new("TextButton", main)
-speed.Size = UDim2.new(0.9,0,0,38)
-speed.Position = UDim2.new(0.05,0,0,y)
-speed.Text = "Speed: 1x"
-speed.BackgroundColor3 = Color3.fromRGB(60,60,60)
-speed.TextColor3 = Color3.new(1,1,1)
-speed.TextScaled = true
-Instance.new("UICorner", speed)
+local speedBtn = Instance.new("TextButton", frame)
+speedBtn.Size = UDim2.new(1,-20,0,40)
+speedBtn.Position = UDim2.new(0,10,0,y)
+speedBtn.Text = "Speed: 16"
+speedBtn.TextScaled = true
+speedBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+speedBtn.TextColor3 = Color3.new(1,1,1)
 
-speed.MouseButton1Click:Connect(function()
-    Core.Config.SpeedMul += 0.25
-    if Core.Config.SpeedMul > 3 then
-        Core.Config.SpeedMul = 1
-    end
-    speed.Text = "Speed: "..Core.Config.SpeedMul.."x"
+speedBtn.MouseButton1Click:Connect(function()
+    State.Speed += 4
+    if State.Speed > 32 then State.Speed = 16 end
+    speedBtn.Text = "Speed: "..State.Speed
 end)

@@ -1,19 +1,15 @@
 -- vl_mobile.lua – Mobile GUI Edition
--- Cole inteiro e use RAW no Delta Mobile
+-- Repo: cole inteiro e use raw.githubusercontent link no Delta mobile
+local players = game:GetService("Players")
+local run     = game:GetService("RunService")
+local input   = game:GetService("UserInputService")
+local tween   = game:GetService("TweenService")
+local tp      = game:GetService("TeleportService")
 
--- ===============================
--- SERVICES
--- ===============================
-local Players    = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UIS        = game:GetService("UserInputService")
-local TP         = game:GetService("TeleportService")
+local lp      = players.LocalPlayer
+local mouse   = lp:GetMouse()
 
-local lp = Players.LocalPlayer
-
--- ===============================
--- CONFIG
--- ===============================
+-- ===== CONFIG =====
 local cfg = {
     autoSpike   = true,
     autoReceive = true,
@@ -25,258 +21,160 @@ local cfg = {
     antiAFK     = true,
     autoFarm    = true,
     clickTP     = true,
-    espColor    = Color3.fromRGB(0,255,0),
-    ballColor   = Color3.fromRGB(255,0,255),
+    espColor    = Color3.new(0,1,0),
+    ballColor   = Color3.new(1,0,1),
     thickness   = 2
 }
+-- ==================
 
--- ===============================
--- UTILS
--- ===============================
-local function getChar()
-    return lp.Character or lp.CharacterAdded:Wait()
-end
-
-local function getHRP()
-    return getChar():FindFirstChild("HumanoidRootPart")
-end
-
-local function getHum()
-    return getChar():FindFirstChildOfClass("Humanoid")
-end
-
+-- ===== UTILS =====
 local function getBall()
-    for _,v in ipairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") and v.Name:lower():find("ball") then
-            return v
-        end
+    for _,v in ipairs(workspace:GetChildren()) do
+        if v.Name:lower():find("ball") and v:IsA("BasePart") then return v end
     end
 end
 
-local function sideFromZ(z)
-    return z > 0 and 1 or 2
+local function getCourtSide(part)
+    if part and part.Name:lower():find("blue") then return 1 end
+    if part and part.Name:lower():find("red")  then return 2 end
+    return 0
 end
 
 local function mySide()
-    local hrp = getHRP()
-    if not hrp then return 0 end
-    return sideFromZ(hrp.Position.Z)
-end
-
-local function ballSide(ball)
-    if not ball then return 0 end
-    return sideFromZ(ball.Position.Z)
+    local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return 0 end
+    return getCourtSide(root.Position.Z > 0 and workspace:FindFirstChild("BlueCourt") or workspace:FindFirstChild("RedCourt"))
 end
 
 local function nearestEnemy()
-    local hrp = getHRP()
-    if not hrp then return end
+    local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
     local enemy, dist = nil, math.huge
-
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            if not lp.Team or p.Team ~= lp.Team then
-                local d = (p.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
-                if d < dist then
-                    enemy, dist = p, d
-                end
-            end
+    for _,p in ipairs(players:GetPlayers()) do
+        if p == lp or (p.Team and p.Team == lp.Team) then continue end
+        local r = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+        if r then
+            local d = (r.Position - root.Position).Magnitude
+            if d < dist then enemy, dist = p, d end
         end
     end
     return enemy
 end
 
--- ===============================
--- ORIGINAL FEATURES
--- ===============================
+-- ===== FEATURES (mesmo código desktop, mas ativado por cfg) =====
 if cfg.autoSpike then
-    RunService.Heartbeat:Connect(function()
-        local ball, hrp = getBall(), getHRP()
-        if not ball or not hrp then return end
-        if ball.AssemblyLinearVelocity.Y < -6 and ball.Position.Y < 14 then
-            if mySide() ~= ballSide(ball) then
-                hrp.CFrame = CFrame.new(ball.Position + Vector3.new(0,-2,0))
-                task.wait(0.05)
-                for _,v in ipairs(getChar():GetDescendants()) do
-                    if v:IsA("RemoteEvent") and v.Name:lower():find("spike") then
-                        v:FireServer()
-                        break
-                    end
-                end
-            end
+    run.Heartbeat:Connect(function()
+        local ball = getBall()
+        local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+        if not ball or not root then return end
+        local bv = ball:FindFirstChildOfClass("BodyVelocity") or ball:FindFirstChild("Velocity")
+        if not bv then return end
+        if bv.Velocity.Y < -6 and ball.Position.Y < 12 and mySide() ~= getCourtSide(ball.Position.Z > 0) then
+            root.CFrame = CFrame.new(Vector3.new(ball.Position.X, ball.Position.Y - 2, ball.Position.Z))
+            wait(0.05)
+            local rem = lp.Character and lp.Character:FindFirstChild("Spike", true)
+            if rem and rem:IsA("RemoteEvent") then rem:FireServer() end
         end
     end)
 end
 
 if cfg.autoReceive then
-    RunService.Heartbeat:Connect(function()
-        local ball, hrp = getBall(), getHRP()
-        if not ball or not hrp then return end
-        if ball.Position.Y < 15 and mySide() == ballSide(ball) then
-            hrp.CFrame = hrp.CFrame:Lerp(
-                CFrame.new(ball.Position + Vector3.new(0,-1,0)), 0.25
-            )
+    run.Heartbeat:Connect(function()
+        local ball = getBall()
+        local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+        if not ball or not root then return end
+        if ball.Position.Y < 14 and mySide() == getCourtSide(ball.Position.Z > 0) then
+            root.CFrame = CFrame.new(Vector3.new(ball.Position.X, ball.Position.Y - 1, ball.Position.Z))
         end
     end)
 end
 
 if cfg.autoBlock then
-    RunService.Heartbeat:Connect(function()
-        local enemy, ball, hrp = nearestEnemy(), getBall(), getHRP()
-        if not enemy or not ball or not hrp then return end
-        local erp = enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart")
-        if erp and (erp.Position - ball.Position).Magnitude < 12 and ball.Position.Y > 18 then
-            hrp.CFrame = CFrame.new(
-                erp.Position + Vector3.new(0,5,(mySide()==1 and -4 or 4))
-            )
+    run.Heartbeat:Connect(function()
+        local enemy = nearestEnemy()
+        local ball = getBall()
+        if not enemy or not ball then return end
+        local r = enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart")
+        if r and (r.Position - ball.Position).Magnitude < 10 and ball.Position.Y > 20 then
+            local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.CFrame = CFrame.new(r.Position + Vector3.new(0, 5, enemy.Team.Name:lower():find("blue") and 5 or -5))
+            end
         end
     end)
 end
 
 if cfg.infJump then
-    RunService.Heartbeat:Connect(function()
-        local hum = getHum()
-        if hum and hum.FloorMaterial == Enum.Material.Air then
-            hum.JumpPower = 60
+    local function hook()
+        local hum = lp.Character and lp.Character:WaitForChild("Humanoid")
+        if hum then
+            run.Heartbeat:Connect(function()
+                if input:IsKeyDown(Enum.KeyCode.Space) then
+                    hum.JumpPower = 60
+                    hum.Jump = true
+                end
+            end)
         end
-    end)
+    end
+    hook()
+    lp.CharacterAdded:Connect(hook)
 end
 
 if cfg.speedMul > 1 then
     local function apply()
-        local hum = getHum()
-        if hum then hum.WalkSpeed = 16 * cfg.speedMul end
+        local hum = lp.Character and lp.Character:WaitForChild("Humanoid")
+        if hum then hum.WalkSpeed = 32 * cfg.speedMul end
     end
     apply()
     lp.CharacterAdded:Connect(apply)
 end
 
--- ===============================
--- EXTENDED RAGE SYSTEM (ADD-ON)
--- ===============================
-local Rage = {
-    enabled = true,
-    humanize = true,
-    maxActionsPerSec = 18,
-    lastAction = 0
-}
-
-local function canAct()
-    local t = os.clock()
-    if t - Rage.lastAction < (1 / Rage.maxActionsPerSec) then
-        return false
+if cfg.ballTracker then
+    local ball = getBall()
+    if ball then
+        local hl = Instance.new("Highlight")
+        hl.Name = "BallHL"
+        hl.FillColor = cfg.ballColor
+        hl.OutlineColor = cfg.ballColor
+        hl.FillTransparency = 0.5
+        hl.Parent = ball
     end
-    Rage.lastAction = t
-    return true
 end
 
-local function randDelay(min, max)
-    if not Rage.humanize then return end
-    task.wait(math.random(min*100, max*100)/1000)
+if cfg.playerESP then
+    local function addEsp(p)
+        if p == lp then return end
+        local ch = p.Character or p.CharacterAdded:Wait()
+        local hl = Instance.new("Highlight")
+        hl.Name = p.Name.."_ESP"
+        hl.FillColor = cfg.espColor
+        hl.OutlineColor = cfg.espColor
+        hl.FillTransparency = 0.75
+        hl.Parent = ch:WaitForChild("HumanoidRootPart")
+        local bbg = Instance.new("BillboardGui")
+        bbg.Name = p.Name.."_TAG"
+        bbg.AlwaysOnTop = true
+        bbg.Size = UDim2.new(0,200,0,50)
+        bbg.StudsOffset = Vector3.new(0,3,0)
+        local txt = Instance.new("TextLabel")
+        txt.Text = p.Name.."\n"..math.floor((ch:WaitForChild("HumanoidRootPart").Position - lp.Character:WaitForChild("HumanoidRootPart").Position).Magnitude).."m"
+        txt.Size = UDim2.new(1,0,1,0)
+        txt.TextColor3 = cfg.espColor
+        txt.BackgroundTransparency = 1
+        txt.Parent = bbg
+        bbg.Parent = ch:WaitForChild("HumanoidRootPart")
+        spawn(function()
+            while wait(0.3) do
+                if not ch.Parent then break end
+                txt.Text = p.Name.."\n"..math.floor((ch.HumanoidRootPart.Position - lp.Character.HumanoidRootPart.Position).Magnitude).."m"
+            end
+        end)
+    end
+    for _,p in ipairs(players:GetPlayers()) do addEsp(p) end
+    players.PlayerAdded:Connect(addEsp)
 end
 
-local function predictBall(ball, timeAhead)
-    if not ball then return end
-    return ball.Position + ball.AssemblyLinearVelocity * timeAhead
-end
-
-task.spawn(function()
-    while task.wait(0.1) do
-        if not cfg.autoFarm then continue end
-        local ball, hrp = getBall(), getHRP()
-        if not ball or not hrp then continue end
-        local predicted = predictBall(ball, 0.35)
-        if predicted then
-            hrp.CFrame = hrp.CFrame:Lerp(
-                CFrame.new(predicted.X, hrp.Position.Y, predicted.Z), 0.35
-            )
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.03) do
-        if not cfg.autoSpike or not Rage.enabled or not canAct() then continue end
-        local ball, hrp = getBall(), getHRP()
-        if not ball or not hrp then continue end
-        if ball.Position.Y > 15 then
-            hrp.CFrame = CFrame.new(ball.Position + Vector3.new(0,-2.5,0))
-            randDelay(5,15)
-            local spike = getChar():FindFirstChild("Spike", true)
-            if spike then spike:FireServer() end
-        end
-    end
-end)
-
--- ===============================
--- BALL TRAJECTORY
--- ===============================
-local beam
-task.spawn(function()
-    while task.wait(0.1) do
-        if not cfg.ballTracker then
-            if beam then beam:Destroy() beam=nil end
-            continue
-        end
-        local ball = getBall()
-        if not ball then continue end
-        if not beam then
-            beam = Instance.new("Beam", ball)
-            local a0 = Instance.new("Attachment", ball)
-            local a1 = Instance.new("Attachment", ball)
-            beam.Attachment0 = a0
-            beam.Attachment1 = a1
-            beam.Width0 = 0.15
-            beam.Width1 = 0.05
-            beam.Color = ColorSequence.new(cfg.ballColor)
-        end
-        local future = predictBall(ball, 0.6)
-        if future then
-            beam.Attachment1.WorldPosition = future
-        end
-    end
-end)
-
--- ===============================
--- MOBILE QUICK GUI
--- ===============================
-local gui = Instance.new("ScreenGui", lp.PlayerGui)
-gui.Name = "VL_RAGE_GUI"
-gui.ResetOnSpawn = false
-
-local btn = Instance.new("TextButton", gui)
-btn.Size = UDim2.new(0,140,0,50)
-btn.Position = UDim2.new(0,20,0.6,0)
-btn.Text = "RAGE: ON"
-btn.BackgroundColor3 = Color3.fromRGB(180,0,0)
-btn.TextColor3 = Color3.new(1,1,1)
-btn.TextScaled = true
-btn.Active = true
-btn.Draggable = true
-
-btn.MouseButton1Click:Connect(function()
-    Rage.enabled = not Rage.enabled
-    cfg.autoFarm = Rage.enabled
-    cfg.autoSpike = Rage.enabled
-    btn.Text = Rage.enabled and "RAGE: ON" or "RAGE: OFF"
-end)
-
--- ===============================
--- ANTI AFK + AUTO REJOIN
--- ===============================
-task.spawn(function()
-    while task.wait(45) do
-        local hrp = getHRP()
-        if hrp then
-            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(2), 0)
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(5) do
-        if #Players:GetPlayers() <= 1 then
-            TP:Teleport(game.PlaceId, lp)
-        end
-    end
-end)
+if cfg.antiAFK then
+    spawn(function()
+        while wait(50) do
+            lp.Character:WaitForChild("HumanoidRootPart").CFrame = lp.Character.HumanoidRootPart.CFrame * CFrame.Angles(0,math.

@@ -1,4 +1,4 @@
--- main.lua – VL Mobile Core
+-- main.lua –- VL Mobile Core
 -- NÃO remover nada / compatível com Delta Mobile
 
 -- ===============================

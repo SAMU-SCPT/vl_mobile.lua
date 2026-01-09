@@ -1,4 +1,4 @@
--- main.lua – VL Core (FIXED & OPTIMIZED)
+-- main.lua – VL CORE FINAL (UI CONTROLLED)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -6,13 +6,14 @@ local RunService = game:GetService("RunService")
 local lp = Players.LocalPlayer
 
 -- ===============================
--- STATE
+-- STATE (CONTROLADO PELA UI)
 -- ===============================
 local State = {
-    AutoSpike = true,
-    AutoReceive = true,
-    AutoFarm = true,
-    BallTracker = true
+    AutoSpike   = false,
+    AutoReceive = false,
+    AutoFarm    = false,
+    BallTracker = false,
+    Speed       = 16
 }
 
 -- ===============================
@@ -58,6 +59,11 @@ end
 local beam, a0, a1
 
 local function updateTracker(ball)
+    if not State.BallTracker then
+        if beam then beam:Destroy() beam=nil end
+        return
+    end
+
     if not beam then
         a0 = Instance.new("Attachment", ball)
         a1 = Instance.new("Attachment", ball)
@@ -71,12 +77,11 @@ local function updateTracker(ball)
         beam.Parent = ball
     end
 
-    local future = predict(ball, 0.6)
-    a1.WorldPosition = future
+    a1.WorldPosition = predict(ball, 0.6)
 end
 
 -- ===============================
--- ACTION CONTROLLER
+-- ACTION CONTROL (ANTI SPAM)
 -- ===============================
 local lastAction = 0
 local function canAct(delay)
@@ -91,12 +96,14 @@ end
 RunService.Heartbeat:Connect(function()
     local ball = getBall()
     local hrp = HRP()
-    if not ball or not hrp then return end
+    local hum = Hum()
+    if not ball or not hrp or not hum then return end
+
+    -- SPEED EM TEMPO REAL
+    hum.WalkSpeed = State.Speed
 
     -- BALL TRACKER
-    if State.BallTracker then
-        updateTracker(ball)
-    end
+    updateTracker(ball)
 
     local velY = ball.AssemblyLinearVelocity.Y
     local dist = (ball.Position - hrp.Position).Magnitude
@@ -111,7 +118,11 @@ RunService.Heartbeat:Connect(function()
         and mySide() ~= ballSide(ball)
         and canAct(0.35)
     then
-        hrp.CFrame = CFrame.new(ball.Position + Vector3.new(0,-2,0))
+        hrp.CFrame = CFrame.new(
+            ball.Position.X,
+            math.clamp(ball.Position.Y - 2, hrp.Position.Y, ball.Position.Y),
+            ball.Position.Z
+        )
 
         for _,v in ipairs(Char():GetDescendants()) do
             if v:IsA("RemoteEvent") and v.Name:lower():find("spike") then
@@ -128,10 +139,14 @@ RunService.Heartbeat:Connect(function()
         and velY < 0
         and mySide() == ballSide(ball)
     then
-        local target = predict(ball, 0.35)
+        local target = predict(ball, 0.4)
         hrp.CFrame = hrp.CFrame:Lerp(
-            CFrame.new(target.X, hrp.Position.Y, target.Z),
-            0.25
+            CFrame.new(
+                target.X,
+                math.max(hrp.Position.Y, target.Y - 1),
+                target.Z
+            ),
+            0.3
         )
         return
     end
@@ -140,7 +155,7 @@ RunService.Heartbeat:Connect(function()
     -- AUTO FARM (PRIORIDADE 3)
     -- ===========================
     if State.AutoFarm then
-        local target = predict(ball, 0.2)
+        local target = predict(ball, 0.25)
         hrp.CFrame = hrp.CFrame:Lerp(
             CFrame.new(target.X, hrp.Position.Y, target.Z),
             0.15

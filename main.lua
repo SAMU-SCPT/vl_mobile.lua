@@ -1,4 +1,4 @@
--- main.lua – VL CORE FINAL (UI CONTROLLED)
+-- main.lua – VL CORE PRO (RAGE/PRO)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -6,34 +6,30 @@ local RunService = game:GetService("RunService")
 local lp = Players.LocalPlayer
 
 -- ===============================
--- STATE (CONTROLADO PELA UI)
+-- STATE CONTROLADO PELA UI
 -- ===============================
 local State = {
     AutoSpike   = false,
+    AutoBlock   = false,
     AutoReceive = false,
     AutoFarm    = false,
+    AutoServe   = false,
     BallTracker = false,
-    Speed       = 16
+    Speed       = 30,
+    MaxSpeed    = 60
 }
 
 -- ===============================
 -- UTILS
 -- ===============================
-local function Char()
-    return lp.Character or lp.CharacterAdded:Wait()
-end
-
-local function HRP()
-    return Char():FindFirstChild("HumanoidRootPart")
-end
-
-local function Hum()
-    return Char():FindFirstChildOfClass("Humanoid")
-end
+local function Char() return lp.Character or lp.CharacterAdded:Wait() end
+local function HRP() return Char():FindFirstChild("HumanoidRootPart") end
+local function Hum() return Char():FindFirstChildOfClass("Humanoid") end
 
 local function getBall()
     for _,v in ipairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") and v.Name:lower():find("ball") then
+            v.CanCollide = true -- aumentar colisão
             return v
         end
     end
@@ -53,31 +49,44 @@ local function ballSide(ball)
     return ball.Position.Z > 0 and 1 or 2
 end
 
+local function nearestEnemy()
+    local hrp = HRP()
+    if not hrp then return end
+    local enemy, dist = nil, math.huge
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            if not lp.Team or p.Team ~= lp.Team then
+                local d = (p.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
+                if d < dist then
+                    enemy, dist = p, d
+                end
+            end
+        end
+    end
+    return enemy
+end
+
 -- ===============================
--- BALL TRACKER (FIXED)
+-- BALL TRACKER (VISUAL)
 -- ===============================
 local beam, a0, a1
-
 local function updateTracker(ball)
     if not State.BallTracker then
         if beam then beam:Destroy() beam=nil end
         return
     end
-
     if not beam then
         a0 = Instance.new("Attachment", ball)
         a1 = Instance.new("Attachment", ball)
-
         beam = Instance.new("Beam")
         beam.Attachment0 = a0
         beam.Attachment1 = a1
         beam.Width0 = 0.15
         beam.Width1 = 0.05
-        beam.Color = ColorSequence.new(Color3.fromRGB(255,0,255))
+        beam.Color = ColorSequence.new(Color3.fromRGB(0,255,0))
         beam.Parent = ball
     end
-
-    a1.WorldPosition = predict(ball, 0.6)
+    a1.WorldPosition = predict(ball,0.6)
 end
 
 -- ===============================
@@ -99,68 +108,78 @@ RunService.Heartbeat:Connect(function()
     local hum = Hum()
     if not ball or not hrp or not hum then return end
 
-    -- SPEED EM TEMPO REAL
+    -- SPEED
     hum.WalkSpeed = State.Speed
 
     -- BALL TRACKER
     updateTracker(ball)
 
-    local velY = ball.AssemblyLinearVelocity.Y
+    -- DISTÂNCIAS
     local dist = (ball.Position - hrp.Position).Magnitude
+    local velY = ball.AssemblyLinearVelocity.Y
+    local enemy = nearestEnemy()
 
     -- ===========================
-    -- AUTO SPIKE (PRIORIDADE 1)
+    -- AUTO SERVE
     -- ===========================
-    if State.AutoSpike
-        and velY < -6
-        and ball.Position.Y > 10
-        and dist < 6
-        and mySide() ~= ballSide(ball)
-        and canAct(0.35)
-    then
-        hrp.CFrame = CFrame.new(
-            ball.Position.X,
-            math.clamp(ball.Position.Y - 2, hrp.Position.Y, ball.Position.Y),
-            ball.Position.Z
-        )
+    if State.AutoServe then
+        local serveRemote = Char():FindFirstChild("Serve",true)
+        if serveRemote and canAct(0.5) then
+            hrp.CFrame = CFrame.new(0,hrp.Position.Y,-20) -- posição de serve padrão
+            serveRemote:FireServer()
+            return
+        end
+    end
 
-        for _,v in ipairs(Char():GetDescendants()) do
-            if v:IsA("RemoteEvent") and v.Name:lower():find("spike") then
-                v:FireServer()
-                return
+    -- ===========================
+    -- AUTO SPIKE
+    -- ===========================
+    if State.AutoSpike then
+        -- mover lateralmente pro campo
+        local targetX = ball.Position.X
+        local targetZ = mySide()==1 and 25 or -25
+        hrp.CFrame = CFrame.new(targetX,hrp.Position.Y,targetZ)
+
+        -- pular se bola acima
+        if velY > 1 then
+            hum.JumpPower = 60
+            hum.Jump = true
+        end
+
+        -- spikar quando bola baixa (Y <=1)
+        if ball.Position.Y <= 1 and dist < 5 and canAct(0.35) then
+            for _,v in ipairs(Char():GetDescendants()) do
+                if v:IsA("RemoteEvent") and v.Name:lower():find("spike") then
+                    v:FireServer()
+                    return
+                end
             end
         end
     end
 
     -- ===========================
-    -- AUTO RECEIVE (PRIORIDADE 2)
+    -- AUTO BLOCK
     -- ===========================
-    if State.AutoReceive
-        and velY < 0
-        and mySide() == ballSide(ball)
-    then
-        local target = predict(ball, 0.4)
-        hrp.CFrame = hrp.CFrame:Lerp(
-            CFrame.new(
-                target.X,
-                math.max(hrp.Position.Y, target.Y - 1),
-                target.Z
-            ),
-            0.3
-        )
-        return
+    if State.AutoBlock and enemy then
+        if ballSide(ball) ~= mySide() then
+            local targetX = ball.Position.X
+            local targetZ = mySide()==1 and 25 or -25
+            hrp.CFrame = CFrame.new(targetX,hrp.Position.Y,targetZ)
+            if velY > 1 then
+                hum.JumpPower = 60
+                hum.Jump = true
+            end
+        end
     end
 
     -- ===========================
-    -- AUTO FARM (PRIORIDADE 3)
+    -- AUTO RECEIVE / FARM
     -- ===========================
-    if State.AutoFarm then
-        local target = predict(ball, 0.25)
-        hrp.CFrame = hrp.CFrame:Lerp(
-            CFrame.new(target.X, hrp.Position.Y, target.Z),
-            0.15
-        )
+    if State.AutoReceive or State.AutoFarm then
+        local target = predict(ball,0.2)
+        hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(target.X,hrp.Position.Y,target.Z),0.15)
     end
+
 end)
 
 return State

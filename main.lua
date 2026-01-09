@@ -1,37 +1,35 @@
--- main.lua – VL Mobile Core
--- NÃO remover nada / compatível com Delta Mobile
+-- main.lua | VL HUB CORE
+-- NÃO EXECUTA SOZINHO — carregado pelo ui.lua
+
+local Core = {}
 
 -- ===============================
 -- SERVICES
 -- ===============================
-local Players    = game:GetService("Players")
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UIS        = game:GetService("UserInputService")
-local TP         = game:GetService("TeleportService")
+local UIS = game:GetService("UserInputService")
+local TP = game:GetService("TeleportService")
 
 local lp = Players.LocalPlayer
 
 -- ===============================
--- CONFIG (COMPARTILHADO COM UI)
+-- CONFIG GLOBAL (EDITADA PELA UI)
 -- ===============================
-getgenv().VL_CFG = {
-    autoSpike   = true,
-    autoReceive = true,
-    autoBlock   = true,
-    infJump     = true,
-    speedMul    = 1.8,
-    ballTracker = true,
-    playerESP   = true,
-    antiAFK     = true,
-    autoFarm    = true,
-    clickTP     = true,
-    rage        = true,
+Core.Config = {
+    AutoSpike   = false,
+    AutoReceive = false,
+    AutoBlock   = false,
+    AutoFarm    = false,
+    InfJump     = false,
+    SpeedMul    = 1,
+    BallTracker = false,
+    AntiAFK     = true,
 
-    espColor  = Color3.fromRGB(0,255,0),
-    ballColor = Color3.fromRGB(255,0,255),
+    ESPEnabled  = false,
+    ESPColor    = Color3.fromRGB(0,255,0),
+    BallColor   = Color3.fromRGB(255,0,255)
 }
-
-local cfg = getgenv().VL_CFG
 
 -- ===============================
 -- UTILS
@@ -41,11 +39,13 @@ local function getChar()
 end
 
 local function getHRP()
-    return getChar():WaitForChild("HumanoidRootPart")
+    local c = getChar()
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
 
 local function getHum()
-    return getChar():WaitForChild("Humanoid")
+    local c = getChar()
+    return c and c:FindFirstChildOfClass("Humanoid")
 end
 
 local function getBall()
@@ -61,21 +61,26 @@ local function sideFromZ(z)
 end
 
 local function mySide()
-    return sideFromZ(getHRP().Position.Z)
+    local hrp = getHRP()
+    return hrp and sideFromZ(hrp.Position.Z) or 0
 end
 
 local function ballSide(ball)
-    return sideFromZ(ball.Position.Z)
+    return ball and sideFromZ(ball.Position.Z) or 0
 end
 
 local function nearestEnemy()
     local hrp = getHRP()
+    if not hrp then return end
+
     local enemy, dist = nil, math.huge
     for _,p in ipairs(Players:GetPlayers()) do
         if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local d = (p.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
-            if d < dist then
-                enemy, dist = p, d
+            if not lp.Team or p.Team ~= lp.Team then
+                local d = (p.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
+                if d < dist then
+                    enemy, dist = p, d
+                end
             end
         end
     end
@@ -83,114 +88,69 @@ local function nearestEnemy()
 end
 
 -- ===============================
--- AUTO SPIKE
+-- MAIN LOOP (OTIMIZADO)
 -- ===============================
 RunService.Heartbeat:Connect(function()
-    if not cfg.autoSpike then return end
+    local cfg = Core.Config
     local ball = getBall()
-    if not ball then return end
+    local hrp  = getHRP()
+    local hum  = getHum()
 
-    if ball.AssemblyLinearVelocity.Y < -6 and ball.Position.Y < 14 then
-        if mySide() ~= ballSide(ball) then
-            getHRP().CFrame = CFrame.new(ball.Position + Vector3.new(0,-2,0))
-            task.wait(0.05)
-            for _,v in ipairs(getChar():GetDescendants()) do
-                if v:IsA("RemoteEvent") and v.Name:lower():find("spike") then
-                    v:FireServer()
-                end
+    if not hrp or not hum then return end
+
+    -- INF JUMP
+    if cfg.InfJump and hum.FloorMaterial == Enum.Material.Air then
+        hum.JumpPower = 65
+    end
+
+    -- SPEED
+    hum.WalkSpeed = 16 * cfg.SpeedMul
+
+    -- AUTO RECEIVE
+    if cfg.AutoReceive and ball and mySide() == ballSide(ball) and ball.Position.Y < 15 then
+        hrp.CFrame = hrp.CFrame:Lerp(
+            CFrame.new(ball.Position + Vector3.new(0,-1,0)), 0.2
+        )
+    end
+
+    -- AUTO SPIKE
+    if cfg.AutoSpike and ball and mySide() ~= ballSide(ball) and ball.Position.Y > 14 then
+        hrp.CFrame = CFrame.new(ball.Position + Vector3.new(0,-2,0))
+    end
+
+    -- AUTO BLOCK
+    if cfg.AutoBlock and ball then
+        local enemy = nearestEnemy()
+        if enemy and enemy.Character then
+            local erp = enemy.Character:FindFirstChild("HumanoidRootPart")
+            if erp and (erp.Position - ball.Position).Magnitude < 12 then
+                hrp.CFrame = CFrame.new(
+                    erp.Position + Vector3.new(0,5,(mySide()==1 and -4 or 4))
+                )
+            end
+        end
+    end
+
+    -- AUTO FARM (SMART FOLLOW BALL)
+    if cfg.AutoFarm and ball then
+        hrp.CFrame = hrp.CFrame:Lerp(
+            CFrame.new(ball.Position.X, hrp.Position.Y, ball.Position.Z), 0.15
+        )
+    end
+end)
+
+-- ===============================
+-- ANTI AFK
+-- ===============================
+task.spawn(function()
+    while task.wait(40) do
+        if Core.Config.AntiAFK then
+            local hrp = getHRP()
+            if hrp then
+                hrp.CFrame *= CFrame.Angles(0, math.rad(5), 0)
             end
         end
     end
 end)
 
--- ===============================
--- AUTO RECEIVE
--- ===============================
-RunService.Heartbeat:Connect(function()
-    if not cfg.autoReceive then return end
-    local ball = getBall()
-    if not ball then return end
-    if ball.Position.Y < 15 and mySide() == ballSide(ball) then
-        getHRP().CFrame = getHRP().CFrame:Lerp(
-            CFrame.new(ball.Position + Vector3.new(0,-1,0)), 0.25
-        )
-    end
-end)
-
--- ===============================
--- AUTO BLOCK
--- ===============================
-RunService.Heartbeat:Connect(function()
-    if not cfg.autoBlock then return end
-    local enemy = nearestEnemy()
-    local ball = getBall()
-    if not enemy or not ball then return end
-
-    local erp = enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart")
-    if erp and (erp.Position - ball.Position).Magnitude < 12 and ball.Position.Y > 18 then
-        getHRP().CFrame = CFrame.new(
-            erp.Position + Vector3.new(0,5,(mySide()==1 and -4 or 4))
-        )
-    end
-end)
-
--- ===============================
--- INF JUMP + SPEED
--- ===============================
-RunService.Heartbeat:Connect(function()
-    if cfg.infJump then
-        local hum = getHum()
-        if hum.FloorMaterial == Enum.Material.Air then
-            hum.JumpPower = 60
-        end
-    end
-end)
-
-local function applySpeed()
-    if cfg.speedMul > 1 then
-        getHum().WalkSpeed = 16 * cfg.speedMul
-    end
-end
-applySpeed()
-lp.CharacterAdded:Connect(applySpeed)
-
--- ===============================
--- AUTO FARM (PREDIÇÃO)
--- ===============================
-task.spawn(function()
-    while task.wait(0.1) do
-        if not cfg.autoFarm then continue end
-        local ball = getBall()
-        if not ball then continue end
-        local predicted = ball.Position + ball.AssemblyLinearVelocity * 0.35
-        getHRP().CFrame = getHRP().CFrame:Lerp(
-            CFrame.new(predicted.X, getHRP().Position.Y, predicted.Z), 0.35
-        )
-    end
-end)
-
--- ===============================
--- ANTI AFK + AUTO REJOIN
--- ===============================
-task.spawn(function()
-    while task.wait(45) do
-        if cfg.antiAFK then
-            getHRP().CFrame *= CFrame.Angles(0, math.rad(2), 0)
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(5) do
-        if #Players:GetPlayers() <= 1 then
-            TP:Teleport(game.PlaceId, lp)
-        end
-    end
-end)
-
--- ===============================
--- LOAD UI
--- ===============================
-loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/SAMU-SCPT/vl_mobile.lua/main/ui.lua"
-))()
+return Core
